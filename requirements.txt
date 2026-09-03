@@ -1,0 +1,10 @@
+# mining-daily-agent dependencies
+# python >= 3.10
+mcp>=1.2.0,<2.0.0
+httpx>=0.27.0
+feedparser>=6.0.11
+beautifulsoup4>=4.12.0
+lxml>=5.2.0
+pypdf>=4.2.0
+python-dotenv>=1.0.1
+pytest>=8.0.0

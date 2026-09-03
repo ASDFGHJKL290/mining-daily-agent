@@ -1,0 +1,76 @@
+{
+  "reports": [
+    {
+      "title": "Pilbara Minerals Limited - NI 43-101 Technical Report on the Pilgangoora Lithium-Tantalum Project, Western Australia",
+      "company": "Pilbara Minerals",
+      "url": "https://www.pilbaraminerals.com.au/reports/pilgangoora-ni43-101.pdf",
+      "commodity": "lithium (spodumene), tantalum",
+      "resources": [
+        {
+          "category": "Indicated",
+          "tonnage_mt": 324.6,
+          "grade": {"pct_li2o": 1.13},
+          "contained_metal": 3668.0,
+          "metal_unit": "kt Li2O",
+          "confidence": "bundled-sample"
+        },
+        {
+          "category": "Inferred",
+          "tonnage_mt": 87.2,
+          "grade": {"pct_li2o": 1.05},
+          "contained_metal": 916.0,
+          "metal_unit": "kt Li2O",
+          "confidence": "bundled-sample"
+        }
+      ]
+    },
+    {
+      "title": "Newmont Corporation - NI 43-101 Technical Report, Nevada Gold Mines (Carlin Trend)",
+      "company": "Newmont",
+      "url": "https://www.newmont.com/reports/nevada-ni43-101.pdf",
+      "commodity": "gold",
+      "resources": [
+        {
+          "category": "Indicated",
+          "tonnage_mt": 948.0,
+          "grade": {"g/t_au": 1.9},
+          "contained_metal": 58.0,
+          "metal_unit": "Moz",
+          "confidence": "bundled-sample"
+        },
+        {
+          "category": "Inferred",
+          "tonnage_mt": 249.0,
+          "grade": {"g/t_au": 1.5},
+          "contained_metal": 12.0,
+          "metal_unit": "Moz",
+          "confidence": "bundled-sample"
+        }
+      ]
+    },
+    {
+      "title": "Barrick Gold Corporation - NI 43-101 Technical Report, Pueblo Viejo Mine, Dominican Republic",
+      "company": "Barrick",
+      "url": "https://www.barrick.com/reports/pueblo-viejo-ni43-101.pdf",
+      "commodity": "gold, silver",
+      "resources": [
+        {
+          "category": "Indicated",
+          "tonnage_mt": 126.4,
+          "grade": {"g/t_au": 2.41},
+          "contained_metal": 9.8,
+          "metal_unit": "Moz",
+          "confidence": "bundled-sample"
+        },
+        {
+          "category": "Inferred",
+          "tonnage_mt": 41.2,
+          "grade": {"g/t_au": 2.1},
+          "contained_metal": 2.8,
+          "metal_unit": "Moz",
+          "confidence": "bundled-sample"
+        }
+      ]
+    }
+  ]
+}

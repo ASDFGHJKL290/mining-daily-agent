@@ -1,0 +1,60 @@
+services:
+  # --- three MCP servers (stdio, exposed for direct health check) -------
+  mining-news-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "servers/mining_news_server.py"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+
+  mineral-pdf-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "servers/mineral_pdf_server.py"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+
+  lme-price-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "servers/lme_price_server.py"]
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+
+  # --- agent: generates one daily briefing and exits ---------------------
+  agent-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "agent.cli", "--out", "outputs/briefing.md",
+              "给我生成一份关于 Pilbara 锂矿的今日简报"]
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com/chat/completions}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    depends_on:
+      - mining-news-mcp
+      - mineral-pdf-mcp
+      - lme-price-mcp
+
+  # --- optional: single-command test suite --------------------------------
+  agent-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "pytest", "tests/", "-q"]
+    volumes:
+      - ./data:/app/data
+    profiles: ["test"]
