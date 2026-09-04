@@ -1,14 +1,34 @@
 # 矿权日报 · Pilbara Minerals（lithium）
 
-> 生成时间：2026-09-03 UTC  
+> 生成时间：2026-09-04 UTC  
 > 原始需求：给我生成一份关于 Pilbara 锂矿的今日简报
 
 ## 一、新闻摘要
 
-1. **Pilbara Minerals accelerates lithium expansion at Pilgangoora as prices stabilise**  
-   来源：mining.com  
-   摘要：Pilbara Minerals said it is bringing forward capacity expansion at its Pilgangoora lithium operation in Western Australia, citing improving spodumene prices and strong demand from Chinese converter customers. The company targets first produ  
-   链接：https://www.mining.com/pilbara-minerals-accelerates-lithium-expansion-pilgangoora/
+1. **Albemarle taps BHP veteran Udd as next CEO**  
+   来源：https://www.mining.com/feed/  
+   摘要：Lithium giant picks a resources veteran to steer the company as battery-metal demand accelerates worldwide.  
+   链接：https://www.mining.com/albemarle-taps-bhp-veteran-udd-as-next-ceo/
+
+2. **Liontown to earn up to 100% interest in Centenario lithium project**  
+   来源：https://www.mining.com/feed/  
+   摘要：The farm-in agreement with NEXT Lithium gives Liontown an opening to build its brine capability early on.  
+   链接：https://www.mining.com/liontown-to-earn-up-to-100-interest-in-centenario-lithium-project/
+
+3. **China’s biggest lithium mine loses licence**  
+   来源：https://www.mining.com/feed/  
+   摘要：Analysts nearly halve CATL’s Jianxiawo output forecast for the year as environmental hurdles delay a sustained return to production.  
+   链接：https://www.mining.com/chinas-biggest-lithium-mine-loses-licence/
+
+4. **Axiant hits ASX after Core Lithium completes spinout**  
+   来源：https://www.mining.com/feed/  
+   摘要：The A$8-million float gives investors direct access to Core’s gold and non-lithium assets while Core keeps a 33% stake.  
+   链接：https://www.mining.com/axiant-hits-asx-after-core-lithium-completes-spinout/
+
+5. **Smackover seals 10-year lithium-supply deal with LG Energy**  
+   来源：https://www.mining.com/feed/  
+   摘要：The Arkansas-based producer will supply LG with 8,000 metric tonnes of battery-grade lithium for ten years.  
+   链接：https://www.mining.com/smackover-seals-10-year-lithium-supply-deal-with-lg/
 
 ## 二、NI 43-101 储量数据
 
@@ -19,24 +39,31 @@
 
 报告：Pilbara Minerals Limited - NI 43-101 Technical Report on the Pilgangoora Lithium-Tantalum Project, Western Australia  
 来源：https://www.pilbaraminerals.com.au/reports/pilgangoora-ni43-101.pdf
+数据说明：来自内置样例报告库（确定性离线演示数据，非实时抓取）。
 
 ## 三、价格走势
 
-- **最新价**（2026-09-03）：**87,900.0 CNY/t**（SHFE Lithium Carbonate）
-- 近 14 个数据点：78,200 → 87,900 （上涨 12.40%）
-- 区间：78,200 ~ 87,900 CNY/t
-- ⚠️ **数据说明**：当前价格来自内置样例序列（离线演示用），非实时行情。
+- **最新价**（2026-09-04）：**150,500.0 CNY/t**（GFEX Lithium Carbonate）
+- 近 22 个数据点：143,220 → 149,880 （上涨 4.65%）
+- 区间：140,000 ~ 161,000 CNY/t
 
 ## 四、风险提示
 
 - 锂/镍价格受电动车与储能需求、以及新增产能投放节奏影响，波动较大。
-- 本简报价格数据为样例序列，不构成投资依据，请以交易所实时行情为准。
 
 ## 五、引用来源
 
-1. Pilbara Minerals accelerates lithium expansion at Pilgangoora as prices stabilise
-   https://www.mining.com/pilbara-minerals-accelerates-lithium-expansion-pilgangoora/
-2. Pilbara Minerals Limited - NI 43-101 Technical Report on the Pilgangoora Lithium-Tantalum Project, Western Australia
+1. Albemarle taps BHP veteran Udd as next CEO
+   https://www.mining.com/albemarle-taps-bhp-veteran-udd-as-next-ceo/
+2. Liontown to earn up to 100% interest in Centenario lithium project
+   https://www.mining.com/liontown-to-earn-up-to-100-interest-in-centenario-lithium-project/
+3. China’s biggest lithium mine loses licence
+   https://www.mining.com/chinas-biggest-lithium-mine-loses-licence/
+4. Axiant hits ASX after Core Lithium completes spinout
+   https://www.mining.com/axiant-hits-asx-after-core-lithium-completes-spinout/
+5. Smackover seals 10-year lithium-supply deal with LG Energy
+   https://www.mining.com/smackover-seals-10-year-lithium-supply-deal-with-lg/
+6. Pilbara Minerals Limited - NI 43-101 Technical Report on the Pilgangoora Lithium-Tantalum Project, Western Australia
    https://www.pilbaraminerals.com.au/reports/pilgangoora-ni43-101.pdf
 
 ---

@@ -52,6 +52,17 @@ RSS_FEEDS = [
 REQUEST_TIMEOUT_SECONDS = 10.0
 MAX_FETCH_BYTES = 500_000  # cap article body download
 
+# mining.com 由 Cloudflare 防护：默认 Python/curl UA 会被 403 拦截，
+# 必须携带真实浏览器 UA + RSS 接受头才能拉到 feed。
+_RSS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -72,8 +83,26 @@ def _load_samples() -> list[dict[str, Any]]:
 
 
 def _fetch_feed(feed_url: str) -> list[dict[str, Any]]:
-    """Fetch and normalise one RSS feed into article dicts."""
-    parsed = feedparser.parse(feed_url)
+    """Fetch and normalise one RSS feed into article dicts.
+
+    先用 httpx + 浏览器 UA 拉取原始 XML（绕过 Cloudflare 反爬），
+    再用 feedparser 解析字节流；httpx 不可用时退化为 feedparser 直连。
+    """
+    raw_xml: bytes | None = None
+    if httpx is not None:
+        try:
+            with httpx.Client(
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                follow_redirects=True,
+                headers=_RSS_HEADERS,
+            ) as client:
+                response = client.get(feed_url)
+                response.raise_for_status()
+                raw_xml = response.content
+        except Exception:  # noqa: BLE001 - network errors, timeouts -> keep going
+            raw_xml = None
+
+    parsed = feedparser.parse(raw_xml) if raw_xml is not None else feedparser.parse(feed_url)
     articles: list[dict[str, Any]] = []
     for entry in parsed.entries[:50]:
         published = entry.get("published_parsed") or entry.get("updated_parsed")

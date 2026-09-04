@@ -25,7 +25,8 @@ def _load(module_name: str):
 
 def test_news_search_returns_articles():
     module = _load("mining_news_server")
-    result = module.search(query="Pilbara", days=30)
+    # copper 在真实 RSS 与内置样例语料中都必然出现（Pilbara 等公司名不保证每日有稿）
+    result = module.search(query="copper", days=30)
     assert result["total"] >= 1
     assert all("title" in a for a in result["articles"])
 

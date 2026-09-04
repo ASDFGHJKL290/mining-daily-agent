@@ -23,8 +23,8 @@
  │search        │ │extract_      │ │get_price     │          │ (Markdown)   │
  │fetch_article │ │resources     │ │get_trend     │          └──────────────┘
  └──────────────┘ └──────────────┘ └──────────────┘
-     新闻聚合           NI 43-101 PDF           LME/SHFE 价格
-     (RSS+全文)         储量抽取 (Mt/g/t/oz)      (行情+趋势)
+     新闻聚合           NI 43-101 PDF           行情价格
+     (RSS+全文)         储量抽取 (Mt/g/t/oz)     (LME/GFEX/DCE 实时+趋势)
 ```
 
 ## 目录结构
@@ -58,9 +58,9 @@ mining-daily-agent/
 ### 1. 三个 MCP server（Python / FastMCP）
 | Server | 工具 | 数据策略 |
 |---|---|---|
-| mining-news-mcp | `search(query, days)` / `fetch_article(url)` | mining.com / S&P RSS → 抓不到自动降级到内置样例 |
+| mining-news-mcp | `search(query, days)` / `fetch_article(url)` | mining.com / S&P RSS（浏览器 UA 绕过反爬）→ 抓不到自动降级到内置样例 |
 | mineral-pdf-mcp | `extract_resources(pdf_url)` | 真实 PDF 启发式扫表（pypdf）→ 失败明确 `needs_human_review`，**绝不编造数字** |
-| lme-price-mcp | `get_price(commodity, date)` / `get_trend(commodity, days)` | LME 公开 CSV → 降级样例序列并显式打 `is_sample` 标记 |
+| lme-price-mcp | `get_price(commodity, date)` / `get_trend(commodity, days)` | 新浪财经实时行情+日K（LME 铜锌镍 / GFEX 碳酸锂 / DCE 铁矿）→ 降级样例序列并显式打 `is_sample` 标记 |
 
 **降级透明原则**：每个 server 都有"真实源 → 样例兜底"两档，且**永远在返回里声明数据是 live 还是 sample**。演示/评测环境无网也能完整跑通。
 
@@ -85,7 +85,7 @@ export DEEPSEEK_API_KEY=sk-xxx     # 或放 ~/Desktop/.env
 python demo.py                     # 生成 Pilbara 锂矿今日简报
 ```
 
-> 没有 DeepSeek key？agent 会自动走确定性规划，日报仍可生成（数据为样例，已标注）。
+> 没有 DeepSeek key？agent 会自动走确定性规划，日报仍可生成（行情/新闻仍走真实源，仅在网络不可达时降级为已标注的样例）。
 
 ## Docker 一键跑
 

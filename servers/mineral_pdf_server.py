@@ -180,7 +180,7 @@ def extract_resources(pdf_url: str) -> dict[str, Any]:
             "report_title": sample.get("title", ""),
             "resources": sample.get("resources", []),
             "needs_human_review": False,
-            "notes": "Served from bundled sample corpus (deterministic).",
+            "notes": "来自内置样例报告库（确定性离线演示数据，非实时抓取）。",
         }
 
     # 2. Live download + heuristic scan

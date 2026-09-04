@@ -163,18 +163,23 @@ class MiningDailyAgent:
         }
 
         # --- news -----------------------------------------------------
+        # 三级回退：公司+商品 -> 仅公司 -> 仅商品(赛道级新闻)。
+        # 真实新闻源不一定天天覆盖某家具体公司(如 Pilbara)，但商品赛道
+        # (lithium/copper...) 基本总有稿件，保证日报新闻栏始终有据可依。
         if plan.get("need_news", True):
             try:
-                raw = await self.mcp.call_tool(
-                    "search", {"query": f"{company} {commodity}", "days": days}
-                )
-                data = _safe_json(raw)
-                articles = (data.get("articles") or [])[:8]
-                if not articles:
-                    raw2 = await self.mcp.call_tool(
-                        "search", {"query": company, "days": days}
+                search_terms = [f"{company} {commodity}", company]
+                commodity_term = _news_keyword(commodity)
+                if commodity_term and commodity_term not in search_terms:
+                    search_terms.append(commodity_term)
+                articles: list[dict[str, Any]] = []
+                for term in search_terms:
+                    if articles:
+                        break
+                    raw = await self.mcp.call_tool(
+                        "search", {"query": term, "days": days}
                     )
-                    articles = (_safe_json(raw2).get("articles") or [])[:8]
+                    articles = (_safe_json(raw).get("articles") or [])[:8]
                 gathered["news"] = articles
                 for article in articles:
                     gathered["citations"].append(
@@ -291,6 +296,9 @@ class MiningDailyAgent:
                 lines.append(f"报告：{resource.get('report_title')}  ")
             if resource.get("report_url"):
                 lines.append(f"来源：{resource.get('report_url')}")
+            resource_notes = resource.get("notes") or ""
+            if "sample" in resource_notes.lower() or "样例" in resource_notes:
+                lines.append(f"数据说明：{resource_notes}")
             lines.append("")
         else:
             lines.append(
@@ -415,6 +423,22 @@ def _safe_json(raw: str) -> dict[str, Any]:
         return data if isinstance(data, dict) else {"data": data}
     except json.JSONDecodeError:
         return {"raw": raw}
+
+
+def _news_keyword(commodity: str) -> str | None:
+    """把商品标识映射成新闻检索词（server 做子串匹配，iron-ore 需展开）。"""
+    mapping = {
+        "lithium": "lithium",
+        "copper": "copper",
+        "zinc": "zinc",
+        "nickel": "nickel",
+        "iron-ore": "iron ore",
+        "iron_ore": "iron ore",
+        "gold": "gold",
+        "silver": "silver",
+        "tantalum": "tantalum",
+    }
+    return mapping.get(str(commodity).lower().strip())
 
 
 def _pick_pdf_url(company: str | None) -> str | None:

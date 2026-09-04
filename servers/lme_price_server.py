@@ -2,28 +2,30 @@
 lme-price-mcp: Commodity price行情 MCP server.
 
 Tools:
-  - get_price(commodity, date)      -> official/cash price for a commodity on a date
-  - get_trend(commodity, days)      -> recent price series + simple analytics
+  - get_price(commodity, date)      -> price for a commodity (latest, or on/before a date)
+  - get_trend(commodity, days)      -> recent daily price series + simple analytics
 
-Supported commodities (symbols):
-  - copper (LME), zinc (LME), nickel (LME), lithium-carbonate (SHFE),
-    iron-ore (DCE-ish/spot proxy)
+Supported commodities:
+  - copper / zinc / nickel   -> LME (London Metal Exchange) cash prices, USD/t
+  - lithium-carbonate        -> GFEX (广州期货交易所) lithium carbonate continuous, CNY/t
+  - iron-ore                 -> DCE (大连商品交易所) iron ore continuous, CNY/t
 
-Real source: for LME base metals we attempt the free public price-series API
-(macro/micro public datasets, e.g. the widely mirrored LME CSV datasets). If the
-network source is unreachable (sandbox / offline demo), the server falls back to
-a bundled, date-stamped sample series so the tool contract always holds.
-
-IMPORTANT: this is a demo/engineering deliverable - prices served from the
-fallback are clearly flagged sample=true and MUST NOT be quoted as live market
-data in the produced briefing without the "sample" caveat.
+Real data sources (all public, no API key, reachable directly from mainland China):
+  1. Sina Finance real-time quotes  https://hq.sinajs.cn/list=hf_*,nf_*  (GBK encoded)
+  2. Sina Finance daily K-line history for trends (Global/Inner futures services)
+The server degrades gracefully: if live sources are unreachable (sandbox / offline
+demo), it falls back to a bundled date-stamped sample series so the tool contract
+always holds. Sample data is ALWAYS flagged is_sample=true and MUST NOT be quoted
+as live market data in a briefing without that caveat.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime, timedelta
+import re
+import time
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -34,24 +36,47 @@ mcp = FastMCP("lme-price-mcp")
 
 PRICE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "price_samples.json")
 
-REQUEST_TIMEOUT_SECONDS = 12.0
+QUOTE_TIMEOUT_SECONDS = 6.0
+KLINE_TIMEOUT_SECONDS = 15.0
 
-# Commodity metadata: {symbol: (display_name, unit)}
-COMMODITIES = {
-    "copper": ("LME Copper", "USD/t"),
-    "zinc": ("LME Zinc", "USD/t"),
-    "nickel": ("LME Nickel", "USD/t"),
-    "lithium": ("SHFE Lithium Carbonate", "CNY/t"),
-    "lithium-carbonate": ("SHFE Lithium Carbonate", "CNY/t"),
-    "iron-ore": ("Iron Ore 62% Fe (spot proxy)", "USD/t"),
+# 品种注册表: symbol -> (新浪行情代码, K线symbol, K线服务类型, 显示名, 单位)
+# K线服务类型: "global" 走 GlobalFuturesService(外盘), "domestic" 走 InnerFuturesNewService(国内)
+COMMODITIES: dict[str, tuple[str, str, str, str, str]] = {
+    "copper": ("hf_CAD", "CAD", "global", "LME Copper", "USD/t"),
+    "zinc": ("hf_ZSD", "ZSD", "global", "LME Zinc", "USD/t"),
+    "nickel": ("hf_NID", "NID", "global", "LME Nickel", "USD/t"),
+    "lithium-carbonate": ("nf_LC0", "LC0", "domestic", "GFEX Lithium Carbonate", "CNY/t"),
+    "iron-ore": ("nf_I0", "I0", "domestic", "DCE Iron Ore (continuous)", "CNY/t"),
+}
+# 别名归一化
+_ALIASES = {"lithium": "lithium-carbonate"}
+
+SINA_QUOTE_URL = "https://hq.sinajs.cn/list={codes}"
+SINA_KLINE_GLOBAL = (
+    "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20t=/"
+    "GlobalFuturesService.getGlobalFuturesDailyKLine?symbol={symbol}"
+)
+SINA_KLINE_DOMESTIC = (
+    "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20t=/"
+    "InnerFuturesNewService.getDailyKLine?symbol={symbol}"
+)
+# 新浪要求带浏览器 Referer / UA，否则拒绝(403)
+_SINA_HEADERS = {
+    "Referer": "https://finance.sina.com.cn",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
 }
 
-# Real public endpoint (no key required). We mirror the LME daily official
-# settlement series used widely in academic datasets.
-LME_CSV_URL = (
-    "https://pkgstore.datahub.io/core/lme-prices/lme-prices_csv/data/"
-    "latest/lme-prices_csv.csv"
-)
+# 日K序列缓存（全量序列从上市日起拉取，约几千条，做 TTL 缓存避免重复请求）
+_KLINE_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_KLINE_CACHE_TTL_SECONDS = 600.0  # 10 分钟
+
+
+# ---------------------------------------------------------------------------
+# Bundled sample series (offline fallback)
+# ---------------------------------------------------------------------------
 
 
 def _load_samples() -> dict[str, Any]:
@@ -65,53 +90,138 @@ def _load_samples() -> dict[str, Any]:
         return {"series": {}}
 
 
-def _get_series(commodity: str) -> list[dict[str, Any]]:
-    """Return date-sorted price points [{date, price}], from live or fallback."""
+def _get_sample_series(symbol: str) -> list[dict[str, Any]]:
+    """返回样例序列（升序）。样例兜底路径用，永远标注 is_sample=true。"""
     samples = _load_samples()
-    symbol = "lithium" if commodity == "lithium-carbonate" else commodity
     series = samples.get("series", {}).get(symbol, [])
-    if not series:
-        return []
-    # refresh timestamps so the demo looks "fresh"
     return sorted(series, key=lambda point: point["date"])
 
 
-def _live_lme_csv() -> dict[str, list[dict[str, Any]]] | None:
-    """Try to fetch real LME series; returns None on any failure."""
+# ---------------------------------------------------------------------------
+# Sina Finance live sources
+# ---------------------------------------------------------------------------
+
+
+def _fetch_quotes(codes: list[str]) -> dict[str, dict[str, Any]]:
+    """批量拉取新浪实时快照。
+
+    Returns:
+        {sina_code: {"price": float, "quote_date": "YYYY-MM-DD"}}
+        网络异常 / 解析失败时返回空 dict（调用方走降级）。
+    """
     try:
-        with httpx.Client(
-            timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True
-        ) as client:
-            response = client.get(LME_CSV_URL)
-            response.raise_for_status()
-            lines = response.text.splitlines()
-        if len(lines) < 3:
-            return None
-        header = [h.strip().lower() for h in lines[0].split(",")]
-        rows: dict[str, list[dict[str, Any]]] = {"copper": [], "zinc": [], "nickel": []}
-        for line in lines[1:]:
-            cols = [c.strip() for c in line.split(",")]
-            if len(cols) < len(header):
+        response = httpx.get(
+            SINA_QUOTE_URL.format(codes=",".join(codes)),
+            headers=_SINA_HEADERS,
+            timeout=QUOTE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        text = response.content.decode("gbk", errors="replace")
+    except Exception:  # noqa: BLE001 - network / encoding issues -> degrade
+        return {}
+
+    quotes: dict[str, dict[str, Any]] = {}
+    for line in text.splitlines():
+        match = re.match(r'var hq_str_([A-Za-z0-9_]+)="(.*)";', line.strip())
+        if not match:
+            continue
+        code, payload = match.group(1), match.group(2)
+        fields = payload.split(",")
+        try:
+            if code.startswith("hf_"):
+                # 外盘格式: [0]=最新价 ... [12]=日期(YYYY-MM-DD) [13]=中文名
+                price = float(fields[0])
+                quote_date = fields[12] if len(fields) > 12 else ""
+            elif code.startswith("nf_"):
+                # 国内期货格式: [0]=名称 [1]=时间 [2]=最新价 ... [17]=日期
+                price = float(fields[2])
+                quote_date = fields[17] if len(fields) > 17 else ""
+            else:
                 continue
-            try:
-                point_date = datetime.strptime(cols[0], "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            for symbol in rows:
-                idx = header.index(symbol) if symbol in header else None
-                if idx is None or idx >= len(cols):
-                    continue
-                try:
-                    price = float(cols[idx])
-                except ValueError:
-                    continue
-                if price > 0:
-                    rows[symbol].append({"date": point_date.isoformat(), "price": price})
-        if all(len(series) >= 2 for series in rows.values()):
-            return rows
+        except (ValueError, IndexError):
+            continue
+        if price <= 0:
+            continue
+        quotes[code] = {"price": price, "quote_date": quote_date}
+    return quotes
+
+
+def _fetch_kline(kind: str, symbol: str) -> list[dict[str, Any]] | None:
+    """拉取新浪日K收盘价序列 [{date, price}]，升序。失败返回 None。
+
+    JSONP 响应形如: var t=([{...},{...}]); 
+    外盘字段: date/open/high/low/close；国内字段: d/o/h/l/c。
+    """
+    if kind == "global":
+        url = SINA_KLINE_GLOBAL.format(symbol=symbol)
+    else:
+        url = SINA_KLINE_DOMESTIC.format(symbol=symbol)
+    try:
+        response = httpx.get(url, headers=_SINA_HEADERS, timeout=KLINE_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        text = response.text
+    except Exception:  # noqa: BLE001
         return None
-    except Exception:  # noqa: BLE001 - network/sandbox failure -> fallback
+
+    match = re.search(r"\((\[.*\])\)", text, re.S)
+    if not match:
         return None
+    try:
+        rows = json.loads(match.group(1))
+    except ValueError:
+        return None
+
+    series: list[dict[str, Any]] = []
+    for row in rows:
+        if kind == "global":
+            day, close = row.get("date"), row.get("close")
+        else:
+            day, close = row.get("d"), row.get("c")
+        try:
+            series.append({"date": day, "price": float(close)})
+        except (TypeError, ValueError):
+            continue
+    return sorted(series, key=lambda point: point["date"]) or None
+
+
+def _live_series(kind: str, symbol: str) -> list[dict[str, Any]] | None:
+    """带 TTL 缓存的日K序列获取。"""
+    cache_key = f"{kind}:{symbol}"
+    cached = _KLINE_CACHE.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < _KLINE_CACHE_TTL_SECONDS:
+        return cached[1]
+    series = _fetch_kline(kind, symbol)
+    if series:
+        _KLINE_CACHE[cache_key] = (now, series)
+    return series
+
+
+def _normalise_symbol(commodity: str) -> str:
+    raw = commodity.strip().lower()
+    return _ALIASES.get(raw, raw)
+
+
+def _live_price_payload(symbol: str) -> dict[str, Any] | None:
+    """优先实时快照，其次日K最新收盘。失败返回 None。"""
+    sina_code, kline_symbol, kind, _display, _unit = COMMODITIES[symbol]
+    quotes = _fetch_quotes([sina_code])
+    if sina_code in quotes:
+        quote = quotes[sina_code]
+        return {
+            "date": quote["quote_date"],
+            "price": quote["price"],
+            "note": "Live source: Sina Finance real-time quote.",
+        }
+    series = _live_series(kind, kline_symbol)
+    if series:
+        point = series[-1]
+        return {
+            "date": point["date"],
+            "price": point["price"],
+            "note": "Live source: Sina Finance daily K-line (latest close).",
+        }
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -121,43 +231,32 @@ def _live_lme_csv() -> dict[str, list[dict[str, Any]]] | None:
 
 @mcp.tool()
 def get_price(commodity: str, date: str | None = None) -> dict[str, Any]:
-    """Get the price of a commodity on a given date (default: latest available).
+    """Get the price of a commodity (latest quote, or the last close on/before a date).
 
     Args:
         commodity: copper | zinc | nickel | lithium-carbonate | iron-ore
-        date: ISO date string (YYYY-MM-DD). If omitted, the latest data point.
+        date: ISO date string (YYYY-MM-DD). If omitted, the latest available quote.
 
     Returns:
         {"commodity", "display_name", "unit", "date", "price",
          "is_sample": bool, "note": "..."}
     """
-    symbol = commodity.strip().lower()
+    symbol = _normalise_symbol(commodity)
     if symbol not in COMMODITIES:
         return {
             "error": f"Unknown commodity '{commodity}'. Supported: {', '.join(COMMODITIES)}"
         }
-    display_name, unit = COMMODITIES[symbol]
+    display_name, unit = COMMODITIES[symbol][3], COMMODITIES[symbol][4]
+    _, kline_symbol, kind, _, _ = COMMODITIES[symbol]
 
-    # Live attempt first for LME metals.
-    live = None
-    if symbol in ("copper", "zinc", "nickel"):
-        live = _live_lme_csv()
-    if live and symbol in live and live[symbol]:
-        series = live[symbol]
-        target = date
-        if target is None:
-            point = series[-1]
-            return {
-                "commodity": symbol,
-                "display_name": display_name,
-                "unit": unit,
-                "date": point["date"],
-                "price": point["price"],
-                "is_sample": False,
-                "note": "Live source: DataHub LME daily series.",
-            }
-        for point in reversed(series):
-            if point["date"] <= target:
+    # 1) 指定了历史日期 -> 用真实日K序列中 <= date 的最后一条收盘价
+    if date:
+        series = _live_series(kind, kline_symbol)
+        if series:
+            point = next(
+                (p for p in reversed(series) if p["date"] <= date), None
+            )
+            if point:
                 return {
                     "commodity": symbol,
                     "display_name": display_name,
@@ -165,18 +264,32 @@ def get_price(commodity: str, date: str | None = None) -> dict[str, Any]:
                     "date": point["date"],
                     "price": point["price"],
                     "is_sample": False,
-                    "note": "Live source: DataHub LME daily series.",
+                    "note": "Live source: Sina Finance daily K-line (close on/before date).",
                 }
-        return {"commodity": symbol, "display_name": display_name, "unit": unit,
-                "date": target, "price": None,
-                "is_sample": False, "note": "No live data point on/before requested date."}
 
-    # Fallback sample series.
-    series = _get_series(symbol)
+    # 2) 未指定日期(或快照更实时) -> 实时快照 / 日K最新
+    live = _live_price_payload(symbol)
+    if live:
+        return {
+            "commodity": symbol,
+            "display_name": display_name,
+            "unit": unit,
+            **live,
+            "is_sample": False,
+        }
+
+    # 3) 降级：内置样例序列（明确标注，绝不冒充实时行情）
+    series = _get_sample_series(symbol)
     if not series:
-        return {"commodity": symbol, "display_name": display_name, "unit": unit,
-                "date": date or "n/a", "price": None,
-                "is_sample": True, "note": "No sample data bundled for this commodity."}
+        return {
+            "commodity": symbol,
+            "display_name": display_name,
+            "unit": unit,
+            "date": date or "n/a",
+            "price": None,
+            "is_sample": True,
+            "note": "No sample data bundled for this commodity.",
+        }
     target = date
     if target is None:
         point = series[-1]
@@ -205,41 +318,74 @@ def get_trend(commodity: str, days: int = 30) -> dict[str, Any]:
         {"commodity", "unit", "points": [{date, price}], "first_price",
          "last_price", "change_pct", "min", "max", "is_sample", "note"}
     """
-    symbol = commodity.strip().lower()
+    symbol = _normalise_symbol(commodity)
     if symbol not in COMMODITIES:
         return {"error": f"Unknown commodity '{commodity}'."}
-    display_name, unit = COMMODITIES[symbol]
+    display_name, unit = COMMODITIES[symbol][3], COMMODITIES[symbol][4]
+    _, kline_symbol, kind, _, _ = COMMODITIES[symbol]
     window = max(1, min(int(days), 365))
 
-    series: list[dict[str, Any]] = []
-    is_sample = True
-    note = "Sample series (offline demo) - NOT live market data."
+    # 1) 真实日K优先
+    live_series = _live_series(kind, kline_symbol)
+    if live_series:
+        cutoff = (datetime.now() - timedelta(days=window)).date().isoformat()
+        windowed = [p for p in live_series if p["date"] >= cutoff]
+        if len(windowed) < 2:
+            windowed = live_series[-window:]
+        prices = [p["price"] for p in windowed if p.get("price") is not None]
+        if prices:
+            change_pct = (
+                round((prices[-1] - prices[0]) / prices[0] * 100, 2)
+                if prices[0]
+                else None
+            )
+            return {
+                "commodity": symbol,
+                "display_name": display_name,
+                "unit": unit,
+                "points": windowed,
+                "first_price": prices[0],
+                "last_price": prices[-1],
+                "change_pct": change_pct,
+                "min": min(prices),
+                "max": max(prices),
+                "is_sample": False,
+                "note": "Live source: Sina Finance daily K-line.",
+            }
 
-    if symbol in ("copper", "zinc", "nickel"):
-        live = _live_lme_csv()
-        if live and symbol in live and live[symbol]:
-            series = live[symbol]
-            is_sample = False
-            note = "Live source: DataHub LME daily series."
-
+    # 2) 降级：内置样例序列
+    series = _get_sample_series(symbol)
     if not series:
-        series = _get_series(symbol)
-
-    if not series:
-        return {"commodity": symbol, "display_name": display_name, "unit": unit,
-                "points": [], "first_price": None, "last_price": None,
-                "change_pct": None, "min": None, "max": None,
-                "is_sample": True, "note": "No data available for this commodity."}
-
+        return {
+            "commodity": symbol,
+            "display_name": display_name,
+            "unit": unit,
+            "points": [],
+            "first_price": None,
+            "last_price": None,
+            "change_pct": None,
+            "min": None,
+            "max": None,
+            "is_sample": True,
+            "note": "No data available for this commodity.",
+        }
     cutoff = (datetime.now() - timedelta(days=window)).date().isoformat()
     windowed = [p for p in series if p["date"] >= cutoff] or series[-window:]
-
     prices = [p["price"] for p in windowed if p.get("price") is not None]
     if not prices:
-        return {"commodity": symbol, "display_name": display_name, "unit": unit,
-                "points": windowed, "first_price": None, "last_price": None,
-                "change_pct": None, "min": None, "max": None,
-                "is_sample": is_sample, "note": note}
+        return {
+            "commodity": symbol,
+            "display_name": display_name,
+            "unit": unit,
+            "points": windowed,
+            "first_price": None,
+            "last_price": None,
+            "change_pct": None,
+            "min": None,
+            "max": None,
+            "is_sample": True,
+            "note": "Sample series (offline demo) - NOT live market data.",
+        }
     change_pct = round((prices[-1] - prices[0]) / prices[0] * 100, 2) if prices[0] else None
     return {
         "commodity": symbol,
@@ -251,8 +397,8 @@ def get_trend(commodity: str, days: int = 30) -> dict[str, Any]:
         "change_pct": change_pct,
         "min": min(prices),
         "max": max(prices),
-        "is_sample": is_sample,
-        "note": note,
+        "is_sample": True,
+        "note": "Sample series (offline demo) - NOT live market data.",
     }
 
 
@@ -260,8 +406,11 @@ def get_trend(commodity: str, days: int = 30) -> dict[str, Any]:
 def list_commodities() -> dict[str, Any]:
     """List supported commodities, units and data mode."""
     return {
-        "commodities": COMMODITIES,
-        "note": "LME metals try a live public source; all symbols have a bundled offline sample.",
+        "commodities": {key: value[3] for key, value in COMMODITIES.items()},
+        "note": (
+            "Live source: Sina Finance (real-time quotes + daily K-line). "
+            "Bundled offline sample series as fallback."
+        ),
     }
 
 
