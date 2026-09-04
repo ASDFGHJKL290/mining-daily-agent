@@ -40,13 +40,14 @@ mining-daily-agent/
 │   ├── mining_news_server.py   # MCP server 1：search / fetch_article / list_sources
 │   ├── mineral_pdf_server.py   # MCP server 2：extract_resources / list_samples
 │   └── lme_price_server.py     # MCP server 3：get_price / get_trend / list_commodities
-├── data/                      # 内置样例语料（离线降级，保证 demo 恒可跑）
+├── data/                      # 内置样例语料（离线降级，保证演示恒可跑）
 │   ├── news_samples.json
 │   ├── pdf_samples.json
 │   └── price_samples.json
+├── main.py                      # 统一入口：python main.py "查询"
 ├── tests/test_smoke.py        # 冒烟测试（8 用例，docker build 时自动跑）
 ├── mcp-config.json            # 可直接导入 Claude Desktop / Cursor
-├── docker-compose.yml         # 一键起 3 server + agent demo
+├── docker-compose.yml         # 一键起 3 server + agent
 ├── Dockerfile
 ├── requirements.txt
 ├── RUN.md                     # 5 分钟跑起来
@@ -82,7 +83,7 @@ python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
 # .venv/bin/python -m pip install -r requirements.txt         # macOS/Linux
 export DEEPSEEK_API_KEY=sk-xxx     # 或放 ~/Desktop/.env
-python demo.py                     # 生成 Pilbara 锂矿今日简报
+python main.py                     # 生成 Pilbara 锂矿今日日报
 ```
 
 > 没有 DeepSeek key？agent 会自动走确定性规划，日报仍可生成（行情/新闻仍走真实源，仅在网络不可达时降级为已标注的样例）。
@@ -90,8 +91,8 @@ python demo.py                     # 生成 Pilbara 锂矿今日简报
 ## Docker 一键跑
 
 ```bash
-# 生成日报（agent-demo 跑完即出 outputs/briefing.md）
-DEEPSEEK_API_KEY=sk-xxx docker compose up agent-demo
+# 生成日报（agent 容器跑完即出 outputs/briefing.md）
+DEEPSEEK_API_KEY=sk-xxx docker compose up agent
 
 # 只起 3 个 MCP server
 docker compose up mining-news-mcp mineral-pdf-mcp lme-price-mcp

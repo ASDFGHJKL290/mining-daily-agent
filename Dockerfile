@@ -13,4 +13,4 @@ COPY . .
 # run unit smoke tests at build time so the image is verified
 RUN python -m pytest tests/ -q -x || python -c "print('tests skipped: pytest not run at build')"
 
-CMD ["python", "-m", "agent.cli"]
+CMD ["python", "main.py"]

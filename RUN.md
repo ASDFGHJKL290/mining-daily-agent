@@ -13,8 +13,8 @@ cd mining-daily-agent
 # 可选：把 key 写入 .env 让 agent 用 LLM 规划（没有 key 也能跑，走确定性规划）
 echo "DEEPSEEK_API_KEY=sk-xxxx" > .env
 
-# 起 3 个 MCP server + 跑一次 demo，自动生成 outputs/briefing.md
-docker compose up agent-demo
+# 起 3 个 MCP server + 生成一次日报，自动写出 outputs/briefing.md
+docker compose up agent
 
 # 看结果
 cat outputs/briefing.md
@@ -39,10 +39,10 @@ python -m venv .venv
 #    macOS/Linux: export DEEPSEEK_API_KEY=sk-xxxx
 #    或放到 ~/Desktop/.env
 
-# 3) 跑演示
-python demo.py
+# 3) 生成日报
+python main.py
 # 或自定义请求：
-python demo.py "Newmont 金矿最近 30 天有什么变化？"
+python main.py "Newmont 金矿最近 30 天有什么变化？"
 
 # 4) 跑冒烟测试
 python -m pytest tests/ -q
@@ -51,7 +51,7 @@ python -m pytest tests/ -q
 ## 方式 C：交互式问答
 
 ```bash
-python -m agent.cli --interactive
+python main.py --interactive
 # > 给我生成一份关于 Pilbara 锂矿的今日简报
 # > 铜价最近走势如何？
 # > exit
@@ -59,26 +59,28 @@ python -m agent.cli --interactive
 
 ---
 
-## 预期输出（demo 示例节选）
+## 预期输出（2026-09-04 真实运行节选，完整样例见 docs/sample_briefing_pilbara.md）
 
 ```markdown
 # 矿权日报 · Pilbara Minerals（lithium）
 
 ## 一、新闻摘要
-1. **Pilbara Minerals accelerates lithium expansion at Pilgangoora...**
-   来源：mining.com
-   链接：https://www.mining.com/...
+1. **Albemarle taps BHP veteran Udd as next CEO**
+   来源：https://www.mining.com/feed/
+   链接：https://www.mining.com/albemarle-taps-bhp-veteran-udd-as-next-ceo/
+2. **China's biggest lithium mine loses licence**（CATL / 真实稿）
+   ...
 
 ## 二、NI 43-101 储量数据
 | 类别 | 矿石量 (Mt) | 品位 | 金属量 |
 |---|---|---|---|
 | Indicated | 324.6 | pct_li2o=1.13 | 3668.0 kt Li2O |
 | Inferred | 87.2 | pct_li2o=1.05 | 916.0 kt Li2O |
+数据说明：来自内置样例报告库（确定性离线演示数据，非实时抓取）。
 
 ## 三、价格走势
-- 最新价（2026-09-03）：87,900.0 CNY/t（SHFE Lithium Carbonate）
-- 近 14 个数据点：78,200 → 87,900 （上涨 12.40%）
-- ⚠️ 数据说明：当前价格来自内置样例序列，非实时行情。
+- 最新价（2026-09-04）：150,500.0 CNY/t（GFEX Lithium Carbonate）— 新浪实时行情
+- 近 22 个数据点：143,220 → 149,880 （上涨 4.65%）
 
 ## 四、风险提示 / ## 五、引用来源
 ```

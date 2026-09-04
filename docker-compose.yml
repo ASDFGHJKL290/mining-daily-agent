@@ -31,7 +31,7 @@ services:
       - ./data:/app/data
 
   # --- agent: generates one daily briefing and exits ---------------------
-  agent-demo:
+  agent:
     build:
       context: .
       dockerfile: Dockerfile
